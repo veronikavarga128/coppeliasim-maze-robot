@@ -1,1 +1,58 @@
-# coppeliasim-maze-robot
+# MazeBot – autonóm labirintus-megoldó robot (CoppeliaSim)
+
+## Fájlok
+
+| Fájl | Tartalom |
+|---|---|
+| `maze_controller.py` | A navigáció teljes logikája (térkép, Flood-Fill, odometria, falalapú korrekciók, állapotgép). Nem függ a CoppeliaSimtől. |
+| `coppelia_adapter.py` | Illesztés a CoppeliaSimhez (`sysCall_init`, `sysCall_actuation`, `sysCall_cleanup`). |
+| `build_robot.py` | Építőscript (ZeroMQ Remote API): felépíti a robotot a megnyitott jelenetbe, és beágyazza a vezérlőt. |
+| `robot_controller_embedded.py` | Az előző kettő összefűzve. Ezt a scriptet kapja meg a robot; kézi bemásoláshoz is használható. |
+| `sim2d/sim2d.py` | 2D-s tesztszimulátor zajjal és csúszással (a kiírás labirintusa + 200 véletlen labirintus). |
+| `dokumentacio/` | Műszaki dokumentáció (HTML-forrás + PDF). |
+
+## Előfeltételek
+
+- **Ajánlott: a legfrissebb CoppeliaSim Edu (4.10).** A kapott jelenetet is ez a verzió mentette. A beágyazott Python scripthez legalább 4.6 kell, a régebbi verziók nem támogatottak.
+- A Python scriptekhez a CoppeliaSim-nek egy Python 3 telepítés kell, benne a `pyzmq` és a `cbor2` csomaggal:
+  `pip install pyzmq cbor2`. Ha a CoppeliaSim nem találja a Pythont, a `usrset.txt` fájlban add meg a `defaultPython` értékét.
+- Az építőscripthez: `pip install coppeliasim-zmqremoteapi-client`
+
+## A robot felépítése (egyszer kell lefuttatni)
+
+1. Nyisd meg a CoppeliaSimben a `Labirintus_1x1m.ttt` jelenetet. A szimuláció legyen leállítva.
+2. Futtasd ebben a mappában: `python build_robot.py`
+   - A script a Start cellába (−0,40; −0,40) felépíti a `MazeBot` modellt, +Y irányba (észak felé) fordítva.
+   - Utána 0,3 másodpercre elindítja a szimulációt, és kiírja a szenzorok méréseit. Ahol fal van, ott 0,05–0,07 m körüli értéket kell látnod.
+3. Mentsd el a jelenetet: **File › Save scene as… › `Labirintus_MazeBot.ttt`**. Ez lesz a leadandó .ttt fájl.
+
+Ha a kezdőirány nem jó a labirintushoz (például a Start cellából csak kelet felé lehet kijutni), az semmit nem ront: a robot a kezdőirányt az odometriához használja, és bármelyik irányba elfordul.
+
+## Futtatás
+
+- **1. menet (felfedezés):** nyomd meg a ▶ gombot. A robot cellánként halad, közben feltérképezi a falakat, a célcellában megáll, és elmenti a térképet. A *Statusbar* ablakban követhető a napló, a végén a labirintus szöveges térképével.
+- **2. menet (legrövidebb út, bónusz):** állítsd le, majd indítsd újra a szimulációt. A robot betölti az előző térképet, és a legrövidebb úton, gyorsabban megy végig. A napló kiírja, hogy az út bizonyítottan optimális-e.
+- **Új labirintus vagy új felfedezés:** a beágyazott script elején állítsd be: `RESET_MAP = True`. Ha a labirintus megváltozott, ez nem kötelező: a robot az ellentmondó falakat menet közben javítja, és szükség esetén maga törli a térképet.
+
+A térkép a CoppeliaSim memóriájában marad meg (`sim.persistentDataWrite`), a program bezárásakor törlődik.
+
+## Hangolás, ha a valódi szimulációban valami nem stimmel
+
+Minden állítható paraméter a `MazeController` osztály elején van:
+
+| Tünet | Paraméter |
+|---|---|
+| Túl lassú vagy túl gyors haladás | `V_EXPLORE`, `V_FAST`, `ACC` |
+| Kígyózik a folyosóban | csökkentsd a `K_LAT`, `K_HEAD` értékét |
+| Megcsúsznak a kerekek induláskor | csökkentsd az `ACC`, `W_ACC` értékét, vagy növeld a kerék súrlódását a `build_robot.py`-ban |
+| Rosszul ismeri fel a falakat | `WALL_TH` (a cellaközéptől mért faltávolság kb. 0,055 m) |
+| Pontatlan 90°-os fordulás | `W_MAX`, illetve a `RobotParams.WHEEL_BASE` (ez a kerekek tényleges távolsága) |
+
+Ha módosítasz valamit, futtasd újra a `build_robot.py`-t, vagy másold be a `robot_controller_embedded.py` új tartalmát a robot scriptjébe (a `python build_robot.py --print-script` paranccsal újragenerálható).
+
+## 2D teszt
+
+```
+cd sim2d
+python sim2d.py --plot teszt_eredmeny.png
+```
