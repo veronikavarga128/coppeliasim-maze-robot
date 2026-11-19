@@ -1,0 +1,20 @@
+MazeBot - futtatasi utmutato
+
+Kovetelmeny: CoppeliaSim Edu 4.10, Python 3 a "pyzmq" es "cbor2" csomaggal
+  pip install pyzmq cbor2
+
+Futtatas:
+1. Scene megnyitasa CoppeliaSimben: File > Open scene... > Labirintus_MazeBot.ttt
+2. Szimulacio inditasa: Start gomb
+   1. menet: a robot felfedezi a labirintust, es a celzonaban megall
+3. Szimulacio leallitasa: Simulation > Stop simulation
+4. Szimulacio ujrainditasa: Start gomb
+   2. menet (bonusz): a robot a legrovidebb uton megy a celba.
+
+A robot naploja a CoppeliaSim also (Statusbar) ablakaban latszik.
+A vezerlo a jelenetbe van beagyazva, kulon scriptet nem kell futtatni.
+A "deprecated" figyelmeztetesek artalmatlanok.
+
+Robot ujraepitese:
+  pip install coppeliasim-zmqremoteapi-client
+  Eredeti Labirintus_1x1m.ttt megnyitasa, majd parancssorban: python build_robot.py
