@@ -32,7 +32,7 @@ Ha a kezdőirány nem jó a labirintushoz (például a Start cellából csak kel
 
 ## Futtatás
 
-- **1. menet (felfedezés):** nyomd meg a ▶ gombot. A robot cellánként halad, közben feltérképezi a falakat, a célcellában megáll, és elmenti a térképet. A *Statusbar* ablakban követhető a napló, a végén a labirintus szöveges térképével.
+- **1. menet (felfedezés):** nyomd meg a Start gombot. A robot cellánként halad, közben feltérképezi a falakat, a célcellában megáll, és elmenti a térképet. A *Statusbar* ablakban követhető a napló, a végén a labirintus szöveges térképével.
 - **2. menet (legrövidebb út, bónusz):** állítsd le, majd indítsd újra a szimulációt. A robot betölti az előző térképet, és a legrövidebb úton, gyorsabban megy végig. A napló kiírja, hogy az út bizonyítottan optimális-e.
 - **Új labirintus vagy új felfedezés:** a beágyazott script elején állítsd be: `RESET_MAP = True`. Ha a labirintus megváltozott, ez nem kötelező: a robot az ellentmondó falakat menet közben javítja, és szükség esetén maga törli a térképet.
 
