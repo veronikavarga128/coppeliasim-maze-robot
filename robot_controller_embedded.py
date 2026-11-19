@@ -1,4 +1,3 @@
-# pyright: reportUndefinedVariable=false
 import math
 import json
 from collections import deque
@@ -493,6 +492,7 @@ MAP_TAG = "MazeBot.mazeMap"
 USE_SAVED_MAP = True
 RESET_MAP = False
 MOTOR_TORQUE = 0.1
+DETECT_STEPS = 10             # fal flag lepesek
 
 _s = {}
 
@@ -502,6 +502,27 @@ def _log(msg):
         sim.addLog(sim.verbosity_scriptinfos, msg)
     except Exception:
         print(msg)
+
+
+def _make_detectable():
+    # falak detektalhatok
+    own = set(sim.getObjectsInTree(_s["h"]["robot"], sim.handle_all, 0))
+    n = 0
+    for sh in sim.getObjectsInTree(sim.handle_scene, sim.object_shape_type, 0):
+        if sh in own or sh in _s["detect"]:
+            continue
+        _s["detect"].add(sh)
+        try:
+            if sim.getObjectInt32Param(sh, sim.shapeintparam_static) != 1:
+                continue
+            p = sim.getObjectSpecialProperty(sh)
+            if not p & sim.objectspecialproperty_detectable:
+                sim.setObjectSpecialProperty(sh, p | sim.objectspecialproperty_detectable)
+                n += 1
+        except Exception:
+            pass
+    if n:
+        _log("[MazeBot] %d statikus shape detektalhato lett." % n)
 
 
 def sysCall_init():
@@ -542,6 +563,9 @@ def sysCall_init():
             prior = None
     _s["h"] = h
     _s["saved"] = False
+    _s["detect"] = set()
+    _s["n"] = 0
+    _make_detectable()
     _s["ctrl"] = MazeController(x0, y0, yaw0, prior_map_json=prior, log=_log)
     _log("[MazeBot] Indulas: x=%.3f y=%.3f irany=%.1f fok, mod: %s"
          % (x0, y0, math.degrees(yaw0), "2. menet (ismert terkep)" if prior else "felfedezes"))
@@ -559,6 +583,9 @@ def sysCall_actuation():
     h = _s["h"]
     ctrl = _s["ctrl"]
     dt = sim.getSimulationTimeStep()
+    _s["n"] += 1
+    if _s["n"] <= DETECT_STEPS:
+        _make_detectable()   # kesoi falak
     wl, wr = ctrl.step(dt, sim.getJointPosition(h["L"]), sim.getJointPosition(h["R"]), _read_dists())
     sim.setJointTargetVelocity(h["L"], wl)
     sim.setJointTargetVelocity(h["R"], wr)
@@ -578,3 +605,4 @@ def _save_map():
 def sysCall_cleanup():
     if "ctrl" in _s and not _s["saved"] and _s["ctrl"].cells_moved > 0:
         _save_map()
+
