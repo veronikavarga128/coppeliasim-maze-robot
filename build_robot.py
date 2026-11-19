@@ -1,3 +1,10 @@
+"""
+MazeBot epito script (ZeroMQ Remote API).
+A megnyitott CoppeliaSim jelenetbe felepiti a robotot (alvaz, kerekek,
+motorok, szenzorok), beagyazza a vezerlo scriptet, majd egy rovid
+onteszttel kiirja a szenzorok mereseit.
+Futtatas: python build_robot.py  (a szimulacio legyen leallitva)
+"""
 import math
 import os
 import sys
@@ -9,20 +16,21 @@ from maze_controller import RobotParams  # noqa: E402
 
 # parameterek
 START = (-0.40, -0.40)          # Start cella
-START_YAW = math.pi / 2
-CHASSIS_D, CHASSIS_H, CLEARANCE = 0.080, 0.035, 0.010
-CASTER_R = 0.008
+START_YAW = math.pi / 2         # kezdoirany: eszak (+Y)
+CHASSIS_D, CHASSIS_H, CLEARANCE = 0.080, 0.035, 0.010   # alvaz atmero, magassag, hasmagassag
+CASTER_R = 0.008                # tamaszgolyo sugara (elol es hatul)
 CASTER_X = 0.030
 WHEEL_R = RobotParams.WHEEL_RADIUS      # 0.022
 WHEEL_W = 0.010
 WHEEL_Y = RobotParams.WHEEL_BASE / 2    # 0.045
-SENSOR_Z = 0.050
+SENSOR_Z = 0.050                # szenzorok magassaga (kiiras: 2-8 cm)
 SENSOR_RANGE = RobotParams.SENSOR_RANGE
 CHASSIS_MASS, WHEEL_MASS = 0.25, 0.03
 WHEEL_FRICTION, BODY_FRICTION = 2.0, 0.0
-HANDLE_WORLD = -1
+HANDLE_WORLD = -1               # vilag koordinatarendszer
 
 
+# a vezerlo + adapter osszefuzese egy beagyazhato scriptte
 def build_script_text():
     with open(os.path.join(HERE, "maze_controller.py"), encoding="utf-8") as f:
         ctrl = f.read()
@@ -32,6 +40,7 @@ def build_script_text():
 
 
 # geometria
+# robot-lokalis pont -> vilag koordinata (a start pozicio es irany alapjan)
 def local_to_world(lx, ly, lz):
     c, s = math.cos(START_YAW), math.sin(START_YAW)
     return (START[0] + c * lx - s * ly, START[1] + s * lx + c * ly, lz)
@@ -43,6 +52,7 @@ def matrix(xaxis, yaxis, zaxis, pos):
             xaxis[2], yaxis[2], zaxis[2], pos[2]]
 
 
+# szenzor orientacio: a meresi tengely (z) vizszintesen, z_angle iranyba nez
 def axis_matrix(z_angle, pos):
     c, s = math.cos(z_angle), math.sin(z_angle)
     return matrix((0, 0, 1), (s, -c, 0), (c, s, 0), pos)
@@ -65,6 +75,7 @@ class Builder:
         except Exception:
             self.sim.setObjectPosition(h, HANDLE_WORLD, list(p))
 
+    # hibaturo hivas: ha egy beallitas nem tamogatott, csak figyelmeztet
     def try_(self, label, fn, *a):
         try:
             return fn(*a)
@@ -72,6 +83,7 @@ class Builder:
             print("  (figyelmeztetes) %s: %s" % (label, e))
             return None
 
+    # dinamikus test: tomeg, surlodas, utkozes (sajat alkatreszek kozott nincs utkozes)
     def dynamic(self, h, mass, friction, density=1000.0):
         sim = self.sim
         sim.setObjectInt32Param(h, sim.shapeintparam_static, 0)
@@ -79,7 +91,7 @@ class Builder:
         self.try_("utkozesi maszk", lambda: sim.setObjectInt32Param(h, sim.shapeintparam_respondable_mask, 0xFF00))
         self.try_("computeMassAndInertia", sim.computeMassAndInertia, h, density)
         self.try_("setShapeMass", sim.setShapeMass, h, mass)
-        # surlodas
+        # surlodas minden fizikai motorhoz (Bullet, ODE, Newton, MuJoCo)
         for name in ("bullet_body_friction", "ode_body_friction",
                      "newton_body_staticfriction", "newton_body_kineticfriction",
                      "mujoco_body_friction1"):
@@ -106,7 +118,9 @@ class Builder:
             print("Regi MazeBot eltavolitasa")
             sim.removeModel(old)
         except Exception:
-            pass
+            pass  # nincs regi robot
+
+        # alvaz + ket tamaszgolyo egy testte csoportositva
 
         chassis = self.cylinder(CHASSIS_D, CHASSIS_H)
         self.set_position(chassis, local_to_world(0, 0, CLEARANCE + CHASSIS_H / 2))
@@ -121,6 +135,7 @@ class Builder:
         self.try_("modell tulajdonsag", sim.setModelProperty, body, 0)
         self.try_("szin", lambda: sim.setShapeColor(body, None, sim.colorcomponent_ambient_diffuse, [0.15, 0.35, 0.75]))
 
+        # bal es jobb kerek: forgo csuklo (revolute joint) sebessegszabalyozott motorral
         for side, sy in (("left", WHEEL_Y), ("right", -WHEEL_Y)):
             j = sim.createJoint(sim.joint_revolute_subtype, sim.jointmode_dynamic, 0, [0.03, 0.006])
             sim.setObjectAlias(j, side + "Motor")
@@ -143,6 +158,7 @@ class Builder:
             self.try_("szin", lambda: sim.setShapeColor(w, None, sim.colorcomponent_ambient_diffuse, [0.1, 0.1, 0.1]))
             sim.setObjectParent(w, j, True)
 
+        # 7 sugaras kozelsegerzekelo (elore, ferden, oldalt elol-hatul)
         for name, (sx, sy, sa) in RobotParams.SENSORS.items():
             h = sim.createProximitySensor(
                 sim.proximitysensor_ray_subtype, 16, 0,
@@ -168,6 +184,7 @@ class Builder:
         return body
 
 
+# rovid szimulacio, majd a szenzorertekek kiirasa (falnal ~0.06 m)
 def self_test(sim, seconds=0.3):
     print("Onteszt: %.1f s szimulacio" % seconds)
     sim.setStepping(True)
@@ -188,6 +205,7 @@ def self_test(sim, seconds=0.3):
     print("Falnal 0.05-0.07 m az elvart ertek.")
 
 
+# kapcsolodas a futo CoppeliaSimhez, robot epitese, onteszt
 def main():
     try:
         from coppeliasim_zmqremoteapi_client import RemoteAPIClient
