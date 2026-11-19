@@ -8,8 +8,8 @@
 | `coppelia_adapter.py` | Illesztés a CoppeliaSimhez (`sysCall_init`, `sysCall_actuation`, `sysCall_cleanup`). |
 | `build_robot.py` | Építőscript (ZeroMQ Remote API): felépíti a robotot a megnyitott jelenetbe, és beágyazza a vezérlőt. |
 | `robot_controller_embedded.py` | Az előző kettő összefűzve. Ezt a scriptet kapja meg a robot; kézi bemásoláshoz is használható. |
-| `sim2d/sim2d.py` | 2D-s tesztszimulátor zajjal és csúszással (a kiírás labirintusa + 200 véletlen labirintus). |
-| `dokumentacio/` | Műszaki dokumentáció (HTML-forrás + PDF). |
+| `sim2d.py` | 2D-s tesztszimulátor zajjal és csúszással (a kiírás labirintusa + 200 véletlen labirintus). |
+| `Labirintus_MazeBot.ttt` | A leadott jelenet: a kapott labirintus és a robot a beágyazott vezérlővel. |
 
 ## Előfeltételek
 
@@ -24,9 +24,11 @@
 2. Futtasd ebben a mappában: `python build_robot.py`
    - A script a Start cellába (−0,40; −0,40) felépíti a `MazeBot` modellt, +Y irányba (észak felé) fordítva.
    - Utána 0,3 másodpercre elindítja a szimulációt, és kiírja a szenzorok méréseit. Ahol fal van, ott 0,05–0,07 m körüli értéket kell látnod.
-3. Mentsd el a jelenetet: **File › Save scene as… › `Labirintus_MazeBot.ttt`**. Ez lesz a leadandó .ttt fájl.
+3. Mentsd el a jelenetet: **File › Save scene as… › `Labirintus_MazeBot2.ttt`**.
 
 Ha a kezdőirány nem jó a labirintushoz (például a Start cellából csak kelet felé lehet kijutni), az semmit nem ront: a robot a kezdőirányt az odometriához használja, és bármelyik irányba elfordul.
+
+**A falak érzékelhetősége:** a kapott jelenet scriptje a szimuláció indulásakor hozza létre a falakat, de *detectable* jelző nélkül, így a távolságszenzorok alapból nem látnák őket. Ezt a robot vezérlője maga oldja meg: indításkor és az első 10 szimulációs lépésben a jelenet összes statikus shape-jét (a robot saját részei kivételével) érzékelhetővé teszi. A jelenetet és a labirintus scriptjét ezért nem kell módosítani, és külön falépítő script (`build_maze.py`) sem kell. A Statusbarban ilyenkor ez a sor jelenik meg: `[MazeBot] N statikus shape detektalhato lett.`
 
 ## Futtatás
 
@@ -53,6 +55,5 @@ Ha módosítasz valamit, futtasd újra a `build_robot.py`-t, vagy másold be a `
 ## 2D teszt
 
 ```
-cd sim2d
 python sim2d.py --plot teszt_eredmeny.png
 ```
