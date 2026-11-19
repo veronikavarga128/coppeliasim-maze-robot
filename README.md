@@ -24,7 +24,7 @@
 2. Futtasd ebben a mappában: `python build_robot.py`
    - A script a Start cellába (−0,40; −0,40) felépíti a `MazeBot` modellt, +Y irányba (észak felé) fordítva.
    - Utána 0,3 másodpercre elindítja a szimulációt, és kiírja a szenzorok méréseit. Ahol fal van, ott 0,05–0,07 m körüli értéket kell látnod.
-3. Mentsd el a jelenetet: **File › Save scene as… › `Labirintus_MazeBot2.ttt`**.
+3. Mentsd el a jelenetet: **File › Save scene as… › `Labirintus_MazeBot.ttt`**.
 
 Ha a kezdőirány nem jó a labirintushoz (például a Start cellából csak kelet felé lehet kijutni), az semmit nem ront: a robot a kezdőirányt az odometriához használja, és bármelyik irányba elfordul.
 
