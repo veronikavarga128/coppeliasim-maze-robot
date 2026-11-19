@@ -13,9 +13,9 @@ START_YAW = math.pi / 2
 CHASSIS_D, CHASSIS_H, CLEARANCE = 0.080, 0.035, 0.010
 CASTER_R = 0.008
 CASTER_X = 0.030
-WHEEL_R = RobotParams.WHEEL_RADIUS      # 0,022
+WHEEL_R = RobotParams.WHEEL_RADIUS      # 0.022
 WHEEL_W = 0.010
-WHEEL_Y = RobotParams.WHEEL_BASE / 2    # 0,045
+WHEEL_Y = RobotParams.WHEEL_BASE / 2    # 0.045
 SENSOR_Z = 0.050
 SENSOR_RANGE = RobotParams.SENSOR_RANGE
 CHASSIS_MASS, WHEEL_MASS = 0.25, 0.03
@@ -38,7 +38,6 @@ def local_to_world(lx, ly, lz):
 
 
 def matrix(xaxis, yaxis, zaxis, pos):
-    """CoppeliaSim 3x4 mátrix (sorfolytonos): [Xx Yx Zx Px, Xy Yy Zy Py, Xz Yz Zz Pz]."""
     return [xaxis[0], yaxis[0], zaxis[0], pos[0],
             xaxis[1], yaxis[1], zaxis[1], pos[1],
             xaxis[2], yaxis[2], zaxis[2], pos[2]]
@@ -56,9 +55,9 @@ class Builder:
     # helpers
     def set_matrix(self, h, m):
         try:
-            self.sim.setObjectMatrix(h, m, HANDLE_WORLD)      # új aláírás
+            self.sim.setObjectMatrix(h, m, HANDLE_WORLD)      # uj api
         except Exception:
-            self.sim.setObjectMatrix(h, HANDLE_WORLD, m)      # régi aláírás
+            self.sim.setObjectMatrix(h, HANDLE_WORLD, m)      # regi api
 
     def set_position(self, h, p):
         try:
@@ -70,7 +69,7 @@ class Builder:
         try:
             return fn(*a)
         except Exception as e:
-            print("  (figyelmeztetés) %s: %s" % (label, e))
+            print("  (figyelmeztetes) %s: %s" % (label, e))
             return None
 
     def dynamic(self, h, mass, friction, density=1000.0):
@@ -80,7 +79,7 @@ class Builder:
         self.try_("utkozesi maszk", lambda: sim.setObjectInt32Param(h, sim.shapeintparam_respondable_mask, 0xFF00))
         self.try_("computeMassAndInertia", sim.computeMassAndInertia, h, density)
         self.try_("setShapeMass", sim.setShapeMass, h, mass)
-        # surlodas minden fizikai motorhoz
+        # surlodas
         for name in ("bullet_body_friction", "ode_body_friction",
                      "newton_body_staticfriction", "newton_body_kineticfriction",
                      "mujoco_body_friction1"):
@@ -119,8 +118,8 @@ class Builder:
         body = sim.groupShapes([chassis] + casters, False)
         sim.setObjectAlias(body, "MazeBot")
         self.dynamic(body, CHASSIS_MASS, BODY_FRICTION)
-        self.try_("modell-tulajdonság", sim.setModelProperty, body, 0)
-        self.try_("szín", lambda: sim.setShapeColor(body, None, sim.colorcomponent_ambient_diffuse, [0.15, 0.35, 0.75]))
+        self.try_("modell tulajdonsag", sim.setModelProperty, body, 0)
+        self.try_("szin", lambda: sim.setShapeColor(body, None, sim.colorcomponent_ambient_diffuse, [0.15, 0.35, 0.75]))
 
         for side, sy in (("left", WHEEL_Y), ("right", -WHEEL_Y)):
             j = sim.createJoint(sim.joint_revolute_subtype, sim.jointmode_dynamic, 0, [0.03, 0.006])
@@ -141,7 +140,7 @@ class Builder:
             self.set_matrix(w, matrix((math.cos(START_YAW), math.sin(START_YAW), 0), (0, 0, -1),
                                       (math.cos(yl), math.sin(yl), 0), p))
             self.dynamic(w, WHEEL_MASS, WHEEL_FRICTION, density=2000.0)
-            self.try_("szín", lambda: sim.setShapeColor(w, None, sim.colorcomponent_ambient_diffuse, [0.1, 0.1, 0.1]))
+            self.try_("szin", lambda: sim.setShapeColor(w, None, sim.colorcomponent_ambient_diffuse, [0.1, 0.1, 0.1]))
             sim.setObjectParent(w, j, True)
 
         for name, (sx, sy, sa) in RobotParams.SENSORS.items():
@@ -153,7 +152,7 @@ class Builder:
             self.set_matrix(h, axis_matrix(START_YAW + sa, local_to_world(sx, sy, SENSOR_Z)))
             sim.setObjectParent(h, body, True)
 
-        # Python vezerlo-script
+        # vezerlo script
         code = build_script_text()
         script = None
         try:
@@ -186,7 +185,7 @@ def self_test(sim, seconds=0.3):
     while sim.getSimulationState() != sim.simulation_stopped:
         time.sleep(0.05)
     sim.setStepping(False)
-    print("Ha a falak fele nezo szenzorok 0,05 es 0,07 m kozottit mernek, a robot rendben van.")
+    print("Falnal 0.05-0.07 m az elvart ertek.")
 
 
 def main():

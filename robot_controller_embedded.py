@@ -1,12 +1,12 @@
+# pyright: reportUndefinedVariable=false
 import math
 import json
 from collections import deque
 
-# palya- és robotparameterek
-N_CELLS = 5                 # 5 x 5 cella
-CELL = 0.20                 # racsosztás [m]
-ORIGIN = -0.5               # a labirintus bal also sarka [m]
-WALL_HALF = 0.005           # falvastagsag fele [m]
+N_CELLS = 5                 # racs meret
+CELL = 0.20                 # cella [m]
+ORIGIN = -0.5               # bal also sarok
+WALL_HALF = 0.005           # fal fele
 START_CELL = (0, 0)
 GOAL_CELLS = [(4, 4)]
 
@@ -17,7 +17,6 @@ UNKNOWN, OPEN, WALL = 0, 1, 2
 
 
 def wrap(a):
-    """Szog normalizalasa (-pi, pi] tartomanyba."""
     while a > math.pi:
         a -= 2.0 * math.pi
     while a <= -math.pi:
@@ -39,7 +38,7 @@ def heading_to_dir(theta):
     return int(round(wrap(theta) / (math.pi / 2.0))) % 4
 
 
-# Terkep + Flood-Fill
+# terkep
 class MazeMap:
 
     def __init__(self):
@@ -61,7 +60,7 @@ class MazeMap:
     def set(self, c, d, state):
         n = (c[0] + DIRS[d][0], c[1] + DIRS[d][1])
         if not self.inside(n):
-            return False           # a külső perem mindig fal
+            return False           # perem fal
         changed = self.walls[c[0]][c[1]][d] != state
         self.walls[c[0]][c[1]][d] = state
         self.walls[n[0]][n[1]][(d + 2) % 4] = state
@@ -104,7 +103,7 @@ class MazeMap:
     def path_length(self, start=START_CELL, optimistic=True):
         return self.flood_fill(optimistic=optimistic)[start[0]][start[1]]
 
-    # mentes / betoltes
+    # mentes
     def to_json(self):
         return json.dumps({"walls": self.walls, "visited": self.visited})
 
@@ -145,7 +144,7 @@ class MazeMap:
         return "\n".join(lines)
 
 
-# Robotparameterek
+# parameterek
 class RobotParams:
     WHEEL_RADIUS = 0.022
     WHEEL_BASE = 0.090
@@ -161,15 +160,13 @@ class RobotParams:
     }
     SENSOR_RANGE = 0.30
 
-# Odometria
+# odometria
 class Pose:
     def __init__(self, x, y, th):
         self.x, self.y, self.th = x, y, th
         self.prev = None
 
     def update(self, phi_l, phi_r, p=RobotParams):
-        """Differenciálhajtás odometriája. phi_l / phi_r a kerékcsuklók
-        (folytonosított) elfordulása [rad]."""
         if self.prev is None:
             self.prev = (phi_l, phi_r)
             return 0.0
@@ -185,30 +182,28 @@ class Pose:
         return ds
 
 
-# Vezerlo allapotgep
+# vezerlo allapotgep
 class MazeController:
-    # --- hangolható paraméterek ---
-    V_EXPLORE = 0.12            # haladási sebesség felfedezéskor [m/s]
-    V_FAST = 0.16               # második menet (ismert térkép) [m/s]
+    # parameterek
+    V_EXPLORE = 0.12            # [m/s]
+    V_FAST = 0.16               # masodik menet
     V_MIN = 0.02
-    ACC = 0.25                  # gyorsulás / lassulás [m/s^2] (sebesség-rámpa)
-    W_MAX = 3.0                 # max. fordulási szögsebesség [rad/s]
-    W_ACC = 8.0                 # szöggyorsulás [rad/s^2]
-    K_LAT = 25.0                # oldalirányú hiba -> szögsebesség [1/(m s)]
-    K_HEAD = 5.0                # irányhiba -> szögsebesség [1/s]
-    WALL_TH = 0.12              # e távolság alatt fal van a cella szélén [m]
-    SIDE_VALID = 0.11           # oldalszenzor korrekcióhoz max. távolság [m]
-    CORR_GAIN = 0.25            # falalapú pozíciókorrekció súlya mintánként
-    HEAD_CORR_GAIN = 0.3        # falalapú irány-korrekció súlya
-    SNAP_TOL = 0.06             # max. elfogadott eltérés a rácsvonalhoz képest [m]
-    EDGE_GAIN = 0.6             # falvég-alapú hosszirányú korrekció súlya
+    ACC = 0.25                  # [m/s^2]
+    W_MAX = 3.0                 # [rad/s]
+    W_ACC = 8.0                 # [rad/s^2]
+    K_LAT = 25.0                # oldalhiba
+    K_HEAD = 5.0                # iranyhiba
+    WALL_TH = 0.12              # fal kuszob
+    SIDE_VALID = 0.11           # oldal max
+    CORR_GAIN = 0.25            # pozicio suly
+    HEAD_CORR_GAIN = 0.3        # irany suly
+    SNAP_TOL = 0.06             # racs tures
+    EDGE_GAIN = 0.6             # falveg suly
     SETTLE_STEPS = 3
     SENSE_STEPS = 4
 
     def __init__(self, x0, y0, th0, prior_map_json=None, log=print):
         self.log = log
-        # A kezdő irányt a legközelebbi 90°-ra kerekítjük (a robot a Start
-        # cellában tengelyirányban áll).
         self.pose = Pose(x0, y0, wrap(round(th0 / (math.pi / 2)) * math.pi / 2))
         self.fast = False
         self.map = MazeMap()
@@ -218,17 +213,17 @@ class MazeController:
                 self.fast = True
                 proven = self.map.path_length(optimistic=False)
                 opt = self.map.path_length(optimistic=True)
-                self.log("[MAP] Előző menet térképe betöltve. Legrövidebb út: %d lépés%s"
-                         % (opt, " (bizonyítottan optimális)" if proven == opt else
-                            " (még nem bizonyított, ismeretlen részeken át)"))
-            except Exception as e:  # sérült adat -> tiszta lap
-                self.log("[MAP] Előző térkép nem olvasható (%s), új felfedezés." % e)
+                self.log("[MAP] Elozo menet terkepe betoltve. Legrovidebb ut: %d lepes%s"
+                         % (opt, " (bizonyitottan optimalis)" if proven == opt else
+                            " (meg nem bizonyitott, ismeretlen reszeken at)"))
+            except Exception as e:
+                self.log("[MAP] Elozo terkep nem olvashato (%s), uj felfedezes." % e)
                 self.map = MazeMap()
         self.cell = cell_of(self.pose.x, self.pose.y)
         self.state = "SETTLE"
         self.t_state = 0
-        self.v = 0.0                # aktuális (rámpázott) előrehaladási sebesség
-        self.w = 0.0                # aktuális szögsebesség
+        self.v = 0.0
+        self.w = 0.0
         self.target_cell = None
         self.target_dir = heading_to_dir(self.pose.th)
         self.done = False
@@ -238,7 +233,7 @@ class MazeController:
         self.path = [self.cell]
         self.map_changed = False
 
-    # ---------------- segédfüggvények ----------------
+    # helpers
     def _ramp(self, cur, target, rate, dt):
         step = rate * dt
         if target > cur + step:
@@ -248,13 +243,11 @@ class MazeController:
         return target
 
     def _wheels(self, v, w, p=RobotParams):
-        """(v, w) -> kerék-szögsebességek [rad/s] (bal, jobb)."""
         wl = (v - w * p.WHEEL_BASE / 2.0) / p.WHEEL_RADIUS
         wr = (v + w * p.WHEEL_BASE / 2.0) / p.WHEEL_RADIUS
         return wl, wr
 
     def _sense_walls(self, dists):
-        """Cellaközépen: falak a robothoz képest elöl / balra / jobbra."""
         h = heading_to_dir(self.pose.th)
         out = {}
         for names, rel in ((("F",), 0), (("LF", "LB"), 1), (("RF", "RB"), 3)):
@@ -263,10 +256,6 @@ class MazeController:
         return out
 
     def _wall_correction(self, dists):
-        """Falalapú pozíciókorrekció. A labirintus falai tengelyirányúak és
-        ismert rácsvonalakon (x,y = -0.5 + k*0.2) állnak, ezért egy merőleges
-        sugár mérése megadja a robot pozícióját az adott tengely mentén.
-        Csak az előre, balra és jobbra néző sugarat használjuk."""
         p = self.pose
         h = heading_to_dir(p.th)
         axis_th = h * math.pi / 2
@@ -283,19 +272,18 @@ class MazeController:
             sx, sy, sa = RobotParams.SENSORS[name]
             ray_th = wrap(p.th + sa)
             ray_dir = heading_to_dir(ray_th)
-            # sugár becsapódási pontja a becsült pózzal
             ox = p.x + sx * math.cos(p.th) - sy * math.sin(p.th)
             oy = p.y + sx * math.sin(p.th) + sy * math.cos(p.th)
             hx = ox + d * math.cos(ray_th)
             hy = oy + d * math.sin(ray_th)
-            if ray_dir in (0, 2):          # X irányú sugár -> függőleges fal
+            if ray_dir in (0, 2):  # x
                 sign = 1 if ray_dir == 0 else -1
                 line = ORIGIN + CELL * round((hx + sign * WALL_HALF - ORIGIN) / CELL)
                 face = line - sign * WALL_HALF
                 err = face - hx
                 if abs(err) < (0.08 if name == "F" else self.SNAP_TOL):
                     p.x += self.CORR_GAIN * err
-            else:                          # Y irányú sugár -> vízszintes fal
+            else:  # y
                 sign = 1 if ray_dir == 1 else -1
                 line = ORIGIN + CELL * round((hy + sign * WALL_HALF - ORIGIN) / CELL)
                 face = line - sign * WALL_HALF
@@ -304,11 +292,6 @@ class MazeController:
                     p.y += self.CORR_GAIN * err
 
     def _heading_correction(self, dists, gain):
-        """Irány-korrekció az oldalsó szenzorpárokkal. Ha mindkét sugár
-        ugyanazt a (tengelyirányú) falat látja, a fal és a robot szöge:
-            bal fal:  tan(e) = (d_LB - d_LF) / bázis
-            jobb fal: tan(e) = (d_RF - d_RB) / bázis
-        A mért irány = legközelebbi tengelyirány + e."""
         axis_th = heading_to_dir(self.pose.th) * math.pi / 2
         meas = []
         for f, b, sgn in (("LF", "LB", -1.0), ("RF", "RB", 1.0)):
@@ -317,7 +300,7 @@ class MazeController:
                 continue
             diff = sgn * (df - db)
             if abs(diff) > RobotParams.PAIR_BASE * math.tan(math.radians(20)):
-                continue           # a két sugár nem ugyanazt a falat látja
+                continue
             meas.append(math.atan2(diff, RobotParams.PAIR_BASE))
         if meas:
             e = sum(meas) / len(meas)
@@ -327,12 +310,6 @@ class MazeController:
         return False
 
     def _edge_correction(self, dists):
-        """Hosszirányú korrekció falvégek alapján (menet közben).
-        Ha egy oldalra néző sugár a két mintavétel között falról
-        "semmire" vált (vagy fordítva), a sugár éppen egy falvég mellett
-        haladt el. A falvégek a rácsvonalaktól ±0,5 cm-re vannak
-        (a sarkok átfedéssel illeszkednek), így a robot hosszirányú
-        helyzete pontosítható – hosszú, elöl nyitott folyosón is."""
         p = self.pose
         d = heading_to_dir(p.th)
         if abs(wrap(p.th - d * math.pi / 2)) > math.radians(10):
@@ -348,9 +325,8 @@ class MazeController:
             if prev is None or prev[0] == near:
                 continue
             sx = RobotParams.SENSORS[name][0]
-            s_est = 0.5 * (prev[1] + a_now) + sx          # a sugár hosszirányú helye
-            # tengely menti koordináta előjelhelyesen (u irányban nő)
-            sgn = ux + uy                                   # +1 (E,N) vagy -1 (W,S)
+            s_est = 0.5 * (prev[1] + a_now) + sx
+            sgn = ux + uy
             line = sgn * (ORIGIN + CELL * round((sgn * s_est - ORIGIN) / CELL))
             expected = line - WALL_HALF if near else line + WALL_HALF
             err = expected - s_est
@@ -358,16 +334,11 @@ class MazeController:
                 k = self.EDGE_GAIN * err
                 p.x += k * ux
                 p.y += k * uy
-                # a többi szenzor előző mintáját is eltoljuk
                 for n2, (nr, a2) in list(self.edge_prev.items()):
                     self.edge_prev[n2] = (nr, a2 + k)
 
-    # ---------------- fő lépés ----------------
+    # main step
     def step(self, dt, phi_l, phi_r, dists):
-        """Egy vezérlési ciklus.
-        dt: időlépés [s]; phi_l/phi_r: kerékszögek [rad];
-        dists: {'F','FL','FR','LF','LB','RF','RB'} -> távolság [m] vagy None.
-        Visszatér: (bal, jobb) kerék-szögsebesség [rad/s]."""
         self.steps += 1
         ds = self.pose.update(phi_l, phi_r)
         self.t_state += 1
@@ -384,8 +355,6 @@ class MazeController:
             return self._wheels(self.v, 0.0)
 
         if self.state == "SENSE":
-            # álló helyzetben, cellaközépen: irány- és pozíciókorrekció
-            # néhány mintából, majd döntés
             self.v = self.w = 0.0
             self._heading_correction(dists, 0.5)
             self._wall_correction(dists)
@@ -402,7 +371,7 @@ class MazeController:
             if self.t_state >= self.SENSE_STEPS:
                 err = wrap(self.target_dir * math.pi / 2 - self.pose.th)
                 if abs(err) > math.radians(2.5):
-                    self._enter("TURN")      # utánfordítás a korrigált irányra
+                    self._enter("TURN")
                 else:
                     self._start_drive()
             return 0.0, 0.0
@@ -421,26 +390,24 @@ class MazeController:
         self.cell = cell_of(p.x, p.y)
         c = self.cell
         self.map.visited[c[0]][c[1]] = True
-        # 1) falak feltérképezése a cellaközépen
+        # 1. falak
         for d, is_wall in self._sense_walls(dists).items():
             if self.map.get(c, d) != WALL or not is_wall:
                 if self.map.set(c, d, WALL if is_wall else OPEN):
                     self.map_changed = True
-        # 2) cél?
+        # 2. cel?
         if c in GOAL_CELLS:
             self.done = True
-            self.log("[CÉL] Megérkezett a %s cellába %d cellalépés után. Pozíció: (%.3f, %.3f)"
+            self.log("[CEL] Megerkezett a %s cellaba %d cellalepes utan. Pozicio: (%.3f, %.3f)"
                      % (str(c), self.cells_moved, p.x, p.y))
             self.log(self.map.ascii(robot=c))
             self._enter("DONE")
             return 0.0, 0.0
-        # 3) Flood-Fill alapú irányválasztás
+        # 3. flood fill
         h = heading_to_dir(p.th)
         d = self.map.best_dir(c, h)
         if d is None:
-            # ellentmondásos (pl. elavult) térkép: újrakezdés tiszta lappal,
-            # de a most mért falakat megtartjuk
-            self.log("[MAP] A cél nem érhető el a térkép szerint – térkép törlése.")
+            self.log("[MAP] A cel nem erheto el a terkep szerint, terkep torlese.")
             fresh = MazeMap()
             for dd, is_wall in self._sense_walls(dists).items():
                 fresh.set(c, dd, WALL if is_wall else OPEN)
@@ -464,16 +431,14 @@ class MazeController:
     def _turn(self, dt, dists):
         target = self.target_dir * math.pi / 2
         err = wrap(target - self.pose.th)
-        # trapéz szögsebesség-profil: lassítás a cél előtt
         w_cmd = math.copysign(max(0.25, min(self.W_MAX, 0.8 * math.sqrt(2 * self.W_ACC * abs(err)))), err)
         if abs(w_cmd) > abs(self.w) or w_cmd * self.w < 0:
-            self.w = self._ramp(self.w, w_cmd, self.W_ACC, dt)   # gyorsítás rámpával
+            self.w = self._ramp(self.w, w_cmd, self.W_ACC, dt)
         else:
-            self.w = w_cmd                                       # lassítás a profil szerint
+            self.w = w_cmd
         self.v = 0.0
         if abs(err) < math.radians(1.5):
             self.w = 0.0
-            # fordulás után álló helyzetben a falakhoz igazítjuk a becslést
             self._enter("POSTTURN")
         return self._wheels(0.0, self.w)
 
@@ -483,15 +448,15 @@ class MazeController:
         axis_th = d * math.pi / 2
         ux, uy = DIRS[d]
         tx, ty = cell_center(self.target_cell)
-        rem = (tx - p.x) * ux + (ty - p.y) * uy           # hátralévő út
-        lat = -(p.x - tx) * uy + (p.y - ty) * ux          # oldalirányú hiba (+ = balra)
+        rem = (tx - p.x) * ux + (ty - p.y) * uy
+        lat = -(p.x - tx) * uy + (p.y - ty) * ux
 
-        # falalapú korrekciók menet közben
+        # korrekcio
         self._heading_correction(dists, self.HEAD_CORR_GAIN)
         self._wall_correction(dists)
         self._edge_correction(dists)
 
-        # biztonsági megállás: elöl túl közel a fal
+        # biztonsagi megallas
         f = dists.get("F")
         if f is not None and f < 0.035:
             rem = min(rem, 0.0)
@@ -506,7 +471,7 @@ class MazeController:
 
         e_head = wrap(p.th - axis_th)
         w_cmd = -self.K_HEAD * e_head - self.K_LAT * lat * (0.4 + self.v / vmax)
-        # sarok-/ferde fal-elkerülés a 45°-os szenzorokkal
+        # sarok elkerules
         fl, fr = dists.get("FL"), dists.get("FR")
         if fl is not None and fl < 0.045:
             w_cmd -= 1.5
@@ -523,22 +488,11 @@ class MazeController:
         return self._wheels(self.v, self.w)
 
 
-# ==========================================================================
-# CoppeliaSim illesztőréteg (beágyazott Python simulation script)
-# --------------------------------------------------------------------------
-# Az építőscript (build_robot.py) ezt a részt a maze_controller.py tartalma
-# után fűzi, és a kész szöveget a MazeBot modellhez csatolt Python
-# simulation scriptként helyezi el a jelenetben.
-#
-# Feladata: szenzorok és kerékszögek kiolvasása -> MazeController.step() ->
-# kerék-szögsebességek kiadása. Minden döntési logika a vezérlőben van.
-# ==========================================================================
-
 ROBOT_PATH = "/MazeBot"
-MAP_TAG = "MazeBot.mazeMap"   # a térkép ezen a kulcson őrződik meg a menetek között
-USE_SAVED_MAP = True          # True: 2. menettől az előző menet térképét használja
-RESET_MAP = False             # True: indításkor törli a mentett térképet (új felfedezés)
-MOTOR_TORQUE = 0.1            # [Nm] a kerékmotorok max. nyomatéka
+MAP_TAG = "MazeBot.mazeMap"
+USE_SAVED_MAP = True
+RESET_MAP = False
+MOTOR_TORQUE = 0.1
 
 _s = {}
 
@@ -555,7 +509,7 @@ def sysCall_init():
     try:
         sim = require("sim")          # CoppeliaSim 4.6+
     except NameError:
-        pass                          # régebbi verzióban a 'sim' globálisan elérhető
+        pass
     h = {}
     h["robot"] = sim.getObject(ROBOT_PATH)
     h["L"] = sim.getObject(ROBOT_PATH + "/leftMotor")
@@ -566,8 +520,7 @@ def sysCall_init():
             sim.setJointTargetForce(j, MOTOR_TORQUE)
         except Exception:
             pass
-    # Kezdőpóz: a két kerékcsukló helyzetéből (a robot ismert kezdőhelyzete
-    # a Start cellában – ezután csak odometria + szenzorok).
+
     pl = sim.getObjectPosition(h["L"], sim.handle_world)
     pr = sim.getObjectPosition(h["R"], sim.handle_world)
     x0, y0 = 0.5 * (pl[0] + pr[0]), 0.5 * (pl[1] + pr[1])
@@ -590,8 +543,8 @@ def sysCall_init():
     _s["h"] = h
     _s["saved"] = False
     _s["ctrl"] = MazeController(x0, y0, yaw0, prior_map_json=prior, log=_log)
-    _log("[MazeBot] Indulás: x=%.3f y=%.3f irány=%.1f°, mód: %s"
-         % (x0, y0, math.degrees(yaw0), "2. menet (ismert térkép)" if prior else "felfedezés"))
+    _log("[MazeBot] Indulas: x=%.3f y=%.3f irany=%.1f fok, mod: %s"
+         % (x0, y0, math.degrees(yaw0), "2. menet (ismert terkep)" if prior else "felfedezes"))
 
 
 def _read_dists():
@@ -616,14 +569,12 @@ def sysCall_actuation():
 def _save_map():
     try:
         sim.persistentDataWrite(MAP_TAG, _s["ctrl"].map.to_json())
-        _log("[MazeBot] Térkép elmentve – a következő indítás a legrövidebb úton megy.")
+        _log("[MazeBot] Terkep elmentve, a kovetkezo inditas a legrovidebb uton megy.")
     except Exception as e:
-        _log("[MazeBot] Térkép mentése sikertelen: %s" % e)
+        _log("[MazeBot] Terkep mentese sikertelen: %s" % e)
     _s["saved"] = True
 
 
 def sysCall_cleanup():
-    # félbeszakított futásnál is megtartjuk, amit addig feltérképezett
     if "ctrl" in _s and not _s["saved"] and _s["ctrl"].cells_moved > 0:
         _save_map()
-

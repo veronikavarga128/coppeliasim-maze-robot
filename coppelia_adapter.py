@@ -1,3 +1,4 @@
+# pyright: reportUndefinedVariable=false
 ROBOT_PATH = "/MazeBot"
 MAP_TAG = "MazeBot.mazeMap"
 USE_SAVED_MAP = True

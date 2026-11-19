@@ -2,10 +2,10 @@ import math
 import json
 from collections import deque
 
-N_CELLS = 5                 # 5 x 5 cella
-CELL = 0.20                 # rácsosztás [m]
-ORIGIN = -0.5               # a labirintus bal alsó sarka [m]
-WALL_HALF = 0.005           # falvastagság fele [m]
+N_CELLS = 5                 # racs meret
+CELL = 0.20                 # cella [m]
+ORIGIN = -0.5               # bal also sarok
+WALL_HALF = 0.005           # fal fele
 START_CELL = (0, 0)
 GOAL_CELLS = [(4, 4)]
 
@@ -16,7 +16,6 @@ UNKNOWN, OPEN, WALL = 0, 1, 2
 
 
 def wrap(a):
-    """Szog normalizalasa (-pi, pi] tartomanyba."""
     while a > math.pi:
         a -= 2.0 * math.pi
     while a <= -math.pi:
@@ -38,7 +37,7 @@ def heading_to_dir(theta):
     return int(round(wrap(theta) / (math.pi / 2.0))) % 4
 
 
-# Terkep + Flood-Fill
+# terkep
 class MazeMap:
 
     def __init__(self):
@@ -58,21 +57,15 @@ class MazeMap:
         return self.walls[c[0]][c[1]][d]
 
     def set(self, c, d, state):
-        """Fal/nyitott beallitasa mindket oldalrol. Visszaadja, valtozott-e."""
         n = (c[0] + DIRS[d][0], c[1] + DIRS[d][1])
         if not self.inside(n):
-            return False           # a külső perem mindig fal
+            return False           # perem fal
         changed = self.walls[c[0]][c[1]][d] != state
         self.walls[c[0]][c[1]][d] = state
         self.walls[n[0]][n[1]][(d + 2) % 4] = state
         return changed
 
     def flood_fill(self, goals=GOAL_CELLS, optimistic=True):
-        """BFS-tavolsag minden cellabol a celig.
-
-        optimistic=True: az ismeretlen falat nyitottnak tekinti.
-        optimistic=False: csak a biztosan nyitott atjarokon halad.
-        """
         INF = 10 ** 6
         dist = [[INF] * N_CELLS for _ in range(N_CELLS)]
         q = deque()
@@ -92,10 +85,6 @@ class MazeMap:
         return dist
 
     def best_dir(self, c, heading_dir):
-        """A szomszed, amelyik a legkozelebb van a celhoz (Flood-Fill).
-        Egyenloseg eseten az egyenesen haladast, majd a kisebb fordulast
-        reszesiti elonyben (kevesebb kanyar = gyorsabb, pontosabb).
-        """
         dist = self.flood_fill()
         best, best_key = None, None
         for d, (di, dj) in enumerate(DIRS):
@@ -113,7 +102,7 @@ class MazeMap:
     def path_length(self, start=START_CELL, optimistic=True):
         return self.flood_fill(optimistic=optimistic)[start[0]][start[1]]
 
-    # mentes / betoltes
+    # mentes
     def to_json(self):
         return json.dumps({"walls": self.walls, "visited": self.visited})
 
@@ -194,21 +183,21 @@ class Pose:
 
 # vezerlo allapotgep
 class MazeController:
-    # allithato parameterek
-    V_EXPLORE = 0.12            # haladasi sebesseg [m/s]
-    V_FAST = 0.16               # masodik menet (ismert terkep) [m/s]
+    # parameterek
+    V_EXPLORE = 0.12            # [m/s]
+    V_FAST = 0.16               # masodik menet
     V_MIN = 0.02
-    ACC = 0.25                  # gyorsulas / lassulas [m/s^2] (sebesseg-rampa)
-    W_MAX = 3.0                 # max. fordulasi szogsebesseg [rad/s]
-    W_ACC = 8.0                 # szoggyorsulas [rad/s^2]
-    K_LAT = 25.0                # oldaliranyu hiba -> szogsebesseg [1/(m s)]
-    K_HEAD = 5.0                # iranyhiba -> szogsebesseg [1/s]
-    WALL_TH = 0.12              # e tavolsag alatt fal van a cella szelen [m]
-    SIDE_VALID = 0.11           # oldalszenzor korrekciohoz max. tavolsag [m]
-    CORR_GAIN = 0.25            # falalapu poziciokorrekcio sulya mintankent
-    HEAD_CORR_GAIN = 0.3        # falalapu irany-korrekcio sulya
-    SNAP_TOL = 0.06             # max. elfogadott elteres a racsvonalhoz kepest [m]
-    EDGE_GAIN = 0.6             # falveg-alapu hossziranyu korrekcio sulya
+    ACC = 0.25                  # [m/s^2]
+    W_MAX = 3.0                 # [rad/s]
+    W_ACC = 8.0                 # [rad/s^2]
+    K_LAT = 25.0                # oldalhiba
+    K_HEAD = 5.0                # iranyhiba
+    WALL_TH = 0.12              # fal kuszob
+    SIDE_VALID = 0.11           # oldal max
+    CORR_GAIN = 0.25            # pozicio suly
+    HEAD_CORR_GAIN = 0.3        # irany suly
+    SNAP_TOL = 0.06             # racs tures
+    EDGE_GAIN = 0.6             # falveg suly
     SETTLE_STEPS = 3
     SENSE_STEPS = 4
 
@@ -253,7 +242,6 @@ class MazeController:
         return target
 
     def _wheels(self, v, w, p=RobotParams):
-        """(v, w) -> kerek-szogsebessegek [rad/s] (bal, jobb)."""
         wl = (v - w * p.WHEEL_BASE / 2.0) / p.WHEEL_RADIUS
         wr = (v + w * p.WHEEL_BASE / 2.0) / p.WHEEL_RADIUS
         return wl, wr
@@ -287,14 +275,14 @@ class MazeController:
             oy = p.y + sx * math.sin(p.th) + sy * math.cos(p.th)
             hx = ox + d * math.cos(ray_th)
             hy = oy + d * math.sin(ray_th)
-            if ray_dir in (0, 2): # X
+            if ray_dir in (0, 2):  # x
                 sign = 1 if ray_dir == 0 else -1
                 line = ORIGIN + CELL * round((hx + sign * WALL_HALF - ORIGIN) / CELL)
                 face = line - sign * WALL_HALF
                 err = face - hx
                 if abs(err) < (0.08 if name == "F" else self.SNAP_TOL):
                     p.x += self.CORR_GAIN * err
-            else: # Y
+            else:  # y
                 sign = 1 if ray_dir == 1 else -1
                 line = ORIGIN + CELL * round((hy + sign * WALL_HALF - ORIGIN) / CELL)
                 face = line - sign * WALL_HALF
@@ -321,7 +309,6 @@ class MazeController:
         return False
 
     def _edge_correction(self, dists):
-        """Hossziranyu korrekcio falvegek alapjan (menet kozben)."""
         p = self.pose
         d = heading_to_dir(p.th)
         if abs(wrap(p.th - d * math.pi / 2)) > math.radians(10):
@@ -351,10 +338,6 @@ class MazeController:
 
     # main step
     def step(self, dt, phi_l, phi_r, dists):
-        """Egy vezerlesi ciklus.
-        dt: idolepes [s]; phi_l/phi_r: kerekszogek [rad];
-        dists: {'F','FL','FR','LF','LB','RF','RB'} -> tavolsag [m] vagy None.
-        Visszater: (bal, jobb) kerek-szogsebesseg [rad/s]."""
         self.steps += 1
         ds = self.pose.update(phi_l, phi_r)
         self.t_state += 1
@@ -419,7 +402,7 @@ class MazeController:
             self.log(self.map.ascii(robot=c))
             self._enter("DONE")
             return 0.0, 0.0
-        # 3) Flood-Fill
+        # 3. flood fill
         h = heading_to_dir(p.th)
         d = self.map.best_dir(c, h)
         if d is None:
@@ -487,7 +470,7 @@ class MazeController:
 
         e_head = wrap(p.th - axis_th)
         w_cmd = -self.K_HEAD * e_head - self.K_LAT * lat * (0.4 + self.v / vmax)
-        # sarok-/ferde fal-elkerules a 45 fokos szenzorokkal
+        # sarok elkerules
         fl, fr = dists.get("FL"), dists.get("FR")
         if fl is not None and fl < 0.045:
             w_cmd -= 1.5
