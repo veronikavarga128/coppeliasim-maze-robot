@@ -1,13 +1,21 @@
+"""
+CoppeliaSim illesztes a MazeBot vezerlohoz.
+A robot scriptjeben fut: inditaskor megkeresi a motorokat es szenzorokat,
+betolti az elozo menet terkepet, minden lepesben kiolvassa a szenzorokat,
+a MazeController-tol kapott kerekszogsebessegeket kiadja a motoroknak,
+a celban elmenti a terkepet. A falakat erzekelhetove teszi (detectable).
+"""
 ROBOT_PATH = "/MazeBot"
-MAP_TAG = "MazeBot.mazeMap"
-USE_SAVED_MAP = True
-RESET_MAP = False
-MOTOR_TORQUE = 0.1
-DETECT_STEPS = 10             # fal flag lepesek
+MAP_TAG = "MazeBot.mazeMap"   # terkep kulcsa a CoppeliaSim memoriajaban
+USE_SAVED_MAP = True          # 2. menet: elozo terkep betoltese
+RESET_MAP = False             # True: terkep torlese, uj felfedezes
+MOTOR_TORQUE = 0.1            # max motor nyomatek [Nm]
+DETECT_STEPS = 10             # ennyi lepesig keressuk a kesobb letrejott falakat
 
-_s = {}
+_s = {}                       # script allapota (handle-ok, vezerlo, szamlalok)
 
 
+# naplo a CoppeliaSim Statusbar ablakaba
 def _log(msg):
     try:
         sim.addLog(sim.verbosity_scriptinfos, msg)
@@ -16,7 +24,8 @@ def _log(msg):
 
 
 def _make_detectable():
-    # falak detektalhatok
+    # a tanari palya falai nem "detectable"-ek, ezert a szenzorok nem latnak oket;
+    # minden statikus shape-et (a robot sajat reszeit kiveve) detektalhatova teszek
     own = set(sim.getObjectsInTree(_s["h"]["robot"], sim.handle_all, 0))
     n = 0
     for sh in sim.getObjectsInTree(sim.handle_scene, sim.object_shape_type, 0):
@@ -36,6 +45,7 @@ def _make_detectable():
         _log("[MazeBot] %d statikus shape detektalhato lett." % n)
 
 
+# szimulacio indulasa
 def sysCall_init():
     global sim
     try:
@@ -53,10 +63,12 @@ def sysCall_init():
         except Exception:
             pass
 
+    # kezdo pozicio es irany a ket kerek helyzetebol
     pl = sim.getObjectPosition(h["L"], sim.handle_world)
     pr = sim.getObjectPosition(h["R"], sim.handle_world)
     x0, y0 = 0.5 * (pl[0] + pr[0]), 0.5 * (pl[1] + pr[1])
     yaw0 = math.atan2(pl[1] - pr[1], pl[0] - pr[0]) - math.pi / 2
+    # terkep: torles (RESET_MAP) vagy az elozo menet betoltese
     prior = None
     if RESET_MAP:
         try:
@@ -82,6 +94,7 @@ def sysCall_init():
          % (x0, y0, math.degrees(yaw0), "2. menet (ismert terkep)" if prior else "felfedezes"))
 
 
+# szenzortavolsagok [m]; None, ha nincs fal a hatotavon belul
 def _read_dists():
     out = {}
     for n, hs in _s["h"]["sens"].items():
@@ -90,6 +103,7 @@ def _read_dists():
     return out
 
 
+# minden szimulacios lepesben: szenzorok -> vezerlo -> motorok
 def sysCall_actuation():
     h = _s["h"]
     ctrl = _s["ctrl"]
@@ -104,6 +118,7 @@ def sysCall_actuation():
         _save_map()
 
 
+# terkep mentese a kovetkezo (legrovidebb utas) menethez
 def _save_map():
     try:
         sim.persistentDataWrite(MAP_TAG, _s["ctrl"].map.to_json())
@@ -113,6 +128,7 @@ def _save_map():
     _s["saved"] = True
 
 
+# leallitaskor: ha a cel elott allitottak le, a reszleges terkepet is mentjuk
 def sysCall_cleanup():
     if "ctrl" in _s and not _s["saved"] and _s["ctrl"].cells_moved > 0:
         _save_map()
