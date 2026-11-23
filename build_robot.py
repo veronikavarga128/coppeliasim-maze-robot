@@ -20,9 +20,9 @@ START_YAW = math.pi / 2         # kezdoirany: eszak (+Y)
 CHASSIS_D, CHASSIS_H, CLEARANCE = 0.080, 0.035, 0.010   # alvaz atmero, magassag, hasmagassag
 CASTER_R = 0.008                # tamaszgolyo sugara (elol es hatul)
 CASTER_X = 0.030
-WHEEL_R = RobotParams.WHEEL_RADIUS      # 0.022
+WHEEL_R = RobotParams.wheelRadius      # 0.022
 WHEEL_W = 0.010
-WHEEL_Y = RobotParams.WHEEL_BASE / 2    # 0.045
+WHEEL_Y = RobotParams.wheelBase / 2    # 0.045
 SENSOR_Z = 0.050                # szenzorok magassaga (kiiras: 2-8 cm)
 SENSOR_RANGE = RobotParams.SENSOR_RANGE
 CHASSIS_MASS, WHEEL_MASS = 0.25, 0.03
@@ -135,7 +135,9 @@ class Builder:
         self.try_("modell tulajdonsag", sim.setModelProperty, body, 0)
         self.try_("szin", lambda: sim.setShapeColor(body, None, sim.colorcomponent_ambient_diffuse, [0.15, 0.35, 0.75]))
 
-        # bal es jobb kerek: forgo csuklo (revolute joint) sebessegszabalyozott motorral
+        # bal es jobb kerek: forgo csuklo (revolute joint) sebessegszabalyozott motorral.
+        # Mindket csuklo tengelye a robot bal oldala fele mutat, ezert pozitiv szogsebesseg
+        # mindket kereknel elore hajt.
         for side, sy in (("left", WHEEL_Y), ("right", -WHEEL_Y)):
             j = sim.createJoint(sim.joint_revolute_subtype, sim.jointmode_dynamic, 0, [0.03, 0.006])
             sim.setObjectAlias(j, side + "Motor")
@@ -207,13 +209,17 @@ def self_test(sim, seconds=0.3):
 
 # kapcsolodas a futo CoppeliaSimhez, robot epitese, onteszt
 def main():
+    # 1. Csatlakozas a CoppeliaSim ZeroMQ szerverehez
     try:
         from coppeliasim_zmqremoteapi_client import RemoteAPIClient
     except ImportError:
         print("Hianyzik: pip install coppeliasim-zmqremoteapi-client")
         sys.exit(1)
     client = RemoteAPIClient()
-    sim = client.require("sim") if hasattr(client, "require") else client.getObject("sim")
+    if hasattr(client, "getObject"):
+        sim = client.getObject("sim")       # orai forma
+    else:
+        sim = client.require("sim")         # ujabb kliensekben ez a neve
     if sim.getSimulationState() != sim.simulation_stopped:
         print("Elobb allitsd le a szimulaciot!")
         sys.exit(1)

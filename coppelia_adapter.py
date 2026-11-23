@@ -12,7 +12,15 @@ RESET_MAP = False             # True: terkep torlese, uj felfedezes
 MOTOR_TORQUE = 0.1            # max motor nyomatek [Nm]
 DETECT_STEPS = 10             # ennyi lepesig keressuk a kesobb letrejott falakat
 
-_s = {}                       # script allapota (handle-ok, vezerlo, szamlalok)
+# handle-ok es a script allapota
+robotHandle = None
+leftMotor = None
+rightMotor = None
+sensors = {}                  # nev -> proximity szenzor handle
+controller = None             # MazeController (allapotgep)
+mapSaved = False
+stepCount = 0
+detectChecked = set()         # mar megvizsgalt shape-ek
 
 
 # naplo a CoppeliaSim Statusbar ablakaba
@@ -26,12 +34,12 @@ def _log(msg):
 def _make_detectable():
     # a tanari palya falai nem "detectable"-ek, ezert a szenzorok nem latnak oket;
     # minden statikus shape-et (a robot sajat reszeit kiveve) detektalhatova teszek
-    own = set(sim.getObjectsInTree(_s["h"]["robot"], sim.handle_all, 0))
+    own = set(sim.getObjectsInTree(robotHandle, sim.handle_all, 0))
     n = 0
     for sh in sim.getObjectsInTree(sim.handle_scene, sim.object_shape_type, 0):
-        if sh in own or sh in _s["detect"]:
+        if sh in own or sh in detectChecked:
             continue
-        _s["detect"].add(sh)
+        detectChecked.add(sh)
         try:
             if sim.getObjectInt32Param(sh, sim.shapeintparam_static) != 1:
                 continue
@@ -47,27 +55,32 @@ def _make_detectable():
 
 # szimulacio indulasa
 def sysCall_init():
-    global sim
+    global sim, robotHandle, leftMotor, rightMotor, sensors, controller
+    global mapSaved, stepCount, detectChecked
+
+    # 1. sim modul (beagyazott scriptben nem kell ZeroMQ kapcsolat)
     try:
         sim = require("sim")          # CoppeliaSim 4.6+
     except NameError:
         pass
-    h = {}
-    h["robot"] = sim.getObject(ROBOT_PATH)
-    h["L"] = sim.getObject(ROBOT_PATH + "/leftMotor")
-    h["R"] = sim.getObject(ROBOT_PATH + "/rightMotor")
-    h["sens"] = {n: sim.getObject(ROBOT_PATH + "/prox_" + n) for n in RobotParams.SENSORS}
-    for j in (h["L"], h["R"]):
+
+    # 2. Objektumok handle-jeinek lekerese
+    robotHandle = sim.getObject(ROBOT_PATH)
+    leftMotor = sim.getObject(ROBOT_PATH + "/leftMotor")
+    rightMotor = sim.getObject(ROBOT_PATH + "/rightMotor")
+    sensors = {n: sim.getObject(ROBOT_PATH + "/prox_" + n) for n in RobotParams.SENSORS}
+    for motor in (leftMotor, rightMotor):
         try:
-            sim.setJointTargetForce(j, MOTOR_TORQUE)
+            sim.setJointTargetForce(motor, MOTOR_TORQUE)
         except Exception:
             pass
 
     # kezdo pozicio es irany a ket kerek helyzetebol
-    pl = sim.getObjectPosition(h["L"], sim.handle_world)
-    pr = sim.getObjectPosition(h["R"], sim.handle_world)
+    pl = sim.getObjectPosition(leftMotor, sim.handle_world)
+    pr = sim.getObjectPosition(rightMotor, sim.handle_world)
     x0, y0 = 0.5 * (pl[0] + pr[0]), 0.5 * (pl[1] + pr[1])
     yaw0 = math.atan2(pl[1] - pr[1], pl[0] - pr[0]) - math.pi / 2
+
     # terkep: torles (RESET_MAP) vagy az elozo menet betoltese
     prior = None
     if RESET_MAP:
@@ -84,51 +97,67 @@ def sysCall_init():
                 prior = None
         except Exception:
             prior = None
-    _s["h"] = h
-    _s["saved"] = False
-    _s["detect"] = set()
-    _s["n"] = 0
+
+    mapSaved = False
+    detectChecked = set()
+    stepCount = 0
     _make_detectable()
-    _s["ctrl"] = MazeController(x0, y0, yaw0, prior_map_json=prior, log=_log)
+
+    # 3-4. Parameterek es allapotgep inicializalasa (kezdo allapot: SETTLE)
+    controller = MazeController(x0, y0, yaw0, prior_map_json=prior, log=_log)
     _log("[MazeBot] Indulas: x=%.3f y=%.3f irany=%.1f fok, mod: %s"
          % (x0, y0, math.degrees(yaw0), "2. menet (ismert terkep)" if prior else "felfedezes"))
 
 
 # szenzortavolsagok [m]; None, ha nincs fal a hatotavon belul
-def _read_dists():
+def _read_sensors():
     out = {}
-    for n, hs in _s["h"]["sens"].items():
-        r = sim.readProximitySensor(hs)
-        out[n] = r[1] if (r and r[0] > 0) else None
+    for name, sensor in sensors.items():
+        r = sim.readProximitySensor(sensor)
+        result, distance = (r[0], r[1]) if r else (0, None)
+        out[name] = distance if result > 0 else None
     return out
 
 
-# minden szimulacios lepesben: szenzorok -> vezerlo -> motorok
+# 5. Fo vezerlesi hurok: minden szimulacios lepesben lefut
 def sysCall_actuation():
-    h = _s["h"]
-    ctrl = _s["ctrl"]
+    global stepCount
     dt = sim.getSimulationTimeStep()
-    _s["n"] += 1
-    if _s["n"] <= DETECT_STEPS:
+    stepCount += 1
+    if stepCount <= DETECT_STEPS:
         _make_detectable()   # kesoi falak
-    wl, wr = ctrl.step(dt, sim.getJointPosition(h["L"]), sim.getJointPosition(h["R"]), _read_dists())
-    sim.setJointTargetVelocity(h["L"], wl)
-    sim.setJointTargetVelocity(h["R"], wr)
-    if ctrl.done and not _s["saved"]:
+
+    # szenzorok -> allapotgep -> inverz kinematika (a MazeController-ben)
+    w_left, w_right = controller.step(dt, sim.getJointPosition(leftMotor),
+                                      sim.getJointPosition(rightMotor), _read_sensors())
+
+    # Parancsok kikuldese
+    sim.setJointTargetVelocity(leftMotor, w_left)
+    sim.setJointTargetVelocity(rightMotor, w_right)
+
+    if controller.done and not mapSaved:
         _save_map()
 
 
 # terkep mentese a kovetkezo (legrovidebb utas) menethez
 def _save_map():
+    global mapSaved
     try:
-        sim.persistentDataWrite(MAP_TAG, _s["ctrl"].map.to_json())
+        sim.persistentDataWrite(MAP_TAG, controller.map.to_json())
         _log("[MazeBot] Terkep elmentve, a kovetkezo inditas a legrovidebb uton megy.")
     except Exception as e:
         _log("[MazeBot] Terkep mentese sikertelen: %s" % e)
-    _s["saved"] = True
+    mapSaved = True
 
 
-# leallitaskor: ha a cel elott allitottak le, a reszleges terkepet is mentjuk
+# leallitaskor: motorok lefekezese
+# ha a cel elott allitottak le, a reszleges terkepet is mentjuk
 def sysCall_cleanup():
-    if "ctrl" in _s and not _s["saved"] and _s["ctrl"].cells_moved > 0:
+    for motor in (leftMotor, rightMotor):
+        if motor is not None:
+            try:
+                sim.setJointTargetVelocity(motor, 0.0)
+            except Exception:
+                pass
+    if controller is not None and not mapSaved and controller.cells_moved > 0:
         _save_map()
