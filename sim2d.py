@@ -119,9 +119,9 @@ class Sim:
         self.dt, self.tau = dt, tau
         self.slip, self.sensor_noise = slip, sensor_noise
         # kerek hiba
-        self.rl = mc.RobotParams.WHEEL_RADIUS * (1 + self.rnd.uniform(-radius_err, radius_err))
-        self.rr = mc.RobotParams.WHEEL_RADIUS * (1 + self.rnd.uniform(-radius_err, radius_err))
-        self.base = mc.RobotParams.WHEEL_BASE * (1 + self.rnd.uniform(-0.03, 0.03))
+        self.rl = mc.RobotParams.wheelRadius * (1 + self.rnd.uniform(-radius_err, radius_err))
+        self.rr = mc.RobotParams.wheelRadius * (1 + self.rnd.uniform(-radius_err, radius_err))
+        self.base = mc.RobotParams.wheelBase * (1 + self.rnd.uniform(-0.03, 0.03))
         self.phi_l = self.phi_r = 0.0
         self.wl = self.wr = 0.0
         self.max_pen = 0.0

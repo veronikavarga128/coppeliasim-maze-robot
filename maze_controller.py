@@ -158,10 +158,10 @@ class MazeMap:
         return "\n".join(lines)
 
 
-# robot meretei es szenzorok helye: (x, y, irany) a robot kozeppontjahoz kepest
+# robot geometriai parameterei es szenzorok helye: (x, y, irany) a robot kozeppontjahoz kepest
 class RobotParams:
-    WHEEL_RADIUS = 0.022
-    WHEEL_BASE = 0.090
+    wheelRadius = 0.022     # R  kerek sugar [m]
+    wheelBase = 0.090       # L  kerektavolsag [m]
     PAIR_BASE = 0.050       # elso es hatso oldalszenzor tavolsaga
     SENSORS = {
         "F":  (0.040, 0.000, 0.0),
@@ -174,7 +174,12 @@ class RobotParams:
     }
     SENSOR_RANGE = 0.30
 
-# odometria: helyzet (x, y, th) a kerekek elfordulasabol (differencialis hajtas)
+# Utmeres - odometria (dead reckoning): helyzet (x, y, th) a kerekek elfordulasabol.
+# Orai keplet: d = (s_t - s_(t-1)) / q * c,  c = 2*pi*R  (q: impulzus/fordulat).
+# A CoppeliaSim a csuklo szoget radianban adja (phi), igy
+#   d = (phi_t - phi_(t-1)) / (2*pi) * 2*pi*R = R * (phi_t - phi_(t-1)).
+# DDR kinematika:  ds = (d_r + d_l) / 2,   dth = (d_r - d_l) / L
+#   x' = v*cos(th),  y' = v*sin(th),  th' = w   (fel lepesnyi szoggel integralva)
 class Pose:
     def __init__(self, x, y, th):
         self.x, self.y, self.th = x, y, th
@@ -184,11 +189,11 @@ class Pose:
         if self.prev is None:
             self.prev = (phi_l, phi_r)
             return 0.0
-        dl = wrap(phi_l - self.prev[0]) * p.WHEEL_RADIUS
-        dr = wrap(phi_r - self.prev[1]) * p.WHEEL_RADIUS
+        d_l = wrap(phi_l - self.prev[0]) * p.wheelRadius    # bal kerek utja
+        d_r = wrap(phi_r - self.prev[1]) * p.wheelRadius    # jobb kerek utja
         self.prev = (phi_l, phi_r)
-        ds = 0.5 * (dl + dr)
-        dth = (dr - dl) / p.WHEEL_BASE
+        ds = 0.5 * (d_l + d_r)
+        dth = (d_r - d_l) / p.wheelBase
         mid = self.th + 0.5 * dth
         self.x += ds * math.cos(mid)
         self.y += ds * math.sin(mid)
@@ -215,6 +220,7 @@ class MazeController:
     EDGE_GAIN = 0.6             # falveg suly
     SETTLE_STEPS = 3            # varakozas inditaskor
     SENSE_STEPS = 4             # meresi lepesek allas kozben
+    stopDistance = 0.035        # biztonsagi megallas, ha az elso szenzor ennel kozelebb lat falat [m]
 
     def __init__(self, x0, y0, th0, prior_map_json=None, log=print):
         self.log = log
@@ -256,11 +262,12 @@ class MazeController:
             return cur - step
         return target
 
-    # (v, w) -> bal/jobb kerek szogsebesseg
-    def _wheels(self, v, w, p=RobotParams):
-        wl = (v - w * p.WHEEL_BASE / 2.0) / p.WHEEL_RADIUS
-        wr = (v + w * p.WHEEL_BASE / 2.0) / p.WHEEL_RADIUS
-        return wl, wr
+    # Inverz kinematika: (v, w) -> bal/jobb kerek szogsebesseg [rad/s]
+    # Orai keplet: phi_r = (2v + wL) / 2R,  phi_l = (2v - wL) / 2R
+    def _inverse_kinematics(self, v, w, p=RobotParams):
+        w_left = (v - (w * p.wheelBase / 2.0)) / p.wheelRadius
+        w_right = (v + (w * p.wheelBase / 2.0)) / p.wheelRadius
+        return w_left, w_right
 
     # falak az elulso, bal es jobb oldalon (kuszob alatti tavolsag = fal)
     def _sense_walls(self, dists):
@@ -371,7 +378,7 @@ class MazeController:
         if self.state == "DONE":
             self.v = self._ramp(self.v, 0.0, self.ACC, dt)
             self.w = 0.0
-            return self._wheels(self.v, 0.0)
+            return self._inverse_kinematics(self.v, 0.0)
 
         if self.state == "SENSE":
             self.v = self.w = 0.0
@@ -462,7 +469,7 @@ class MazeController:
         if abs(err) < math.radians(1.5):
             self.w = 0.0
             self._enter("POSTTURN")
-        return self._wheels(0.0, self.w)
+        return self._inverse_kinematics(0.0, self.w)
 
     # egyenes haladas a kovetkezo cella kozepeig: sebessegramp + oldal/iranyhiba szabalyozas
     def _drive(self, dt, dists, ds):
@@ -481,7 +488,7 @@ class MazeController:
 
         # biztonsagi megallas
         f = dists.get("F")
-        if f is not None and f < 0.035:
+        if f is not None and f < self.stopDistance:
             rem = min(rem, 0.0)
 
         vmax = self.V_FAST if self.fast else self.V_EXPLORE
@@ -508,4 +515,4 @@ class MazeController:
             self.path.append(self.target_cell)
             self._enter("SENSE")
             return 0.0, 0.0
-        return self._wheels(self.v, self.w)
+        return self._inverse_kinematics(self.v, self.w)
