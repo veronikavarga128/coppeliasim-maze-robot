@@ -48,9 +48,19 @@ Minden állítható paraméter a `MazeController` osztály elején van:
 | Kígyózik a folyosóban | csökkentsd a `K_LAT`, `K_HEAD` értékét |
 | Megcsúsznak a kerekek induláskor | csökkentsd az `ACC`, `W_ACC` értékét, vagy növeld a kerék súrlódását a `build_robot.py`-ban |
 | Rosszul ismeri fel a falakat | `WALL_TH` (a cellaközéptől mért faltávolság kb. 0,055 m) |
-| Pontatlan 90°-os fordulás | `W_MAX`, illetve a `RobotParams.WHEEL_BASE` (ez a kerekek tényleges távolsága) |
+| Pontatlan 90°-os fordulás | `W_MAX`, illetve a `RobotParams.wheelBase` (ez a kerekek tényleges távolsága) |
 
 Ha módosítasz valamit, futtasd újra a `build_robot.py`-t, vagy másold be a `robot_controller_embedded.py` új tartalmát a robot scriptjébe (a `python build_robot.py --print-script` paranccsal újragenerálható).
+
+## Kapcsolat az órai anyagokkal
+
+- **Inverz kinematika** (03 Modell, DDR inverz kinematikai modell; `CoppeliasimRobot.m`): `MazeController._inverse_kinematics()`
+  `w_left = (v - (w * wheelBase / 2.0)) / wheelRadius`, `w_right = (v + (w * wheelBase / 2.0)) / wheelRadius`.
+  Az órai jelenetben a jobb motor tükrözött, ezért ott `-1.0`-s szorzó kell a `w_right`-ra; a MazeBot két csuklója egy irányba néz, így itt nem kell.
+- **Odometria / dead reckoning** (03 Modell, Útmérés): `Pose.update()`, `d = R·Δφ` (az órai `d = Δs/q · c`, `c = 2πR` alakja radiánban mért kerékszögre), `ds = (d_r + d_l)/2`, `dθ = (d_r − d_l)/L`.
+- **Véges állapotú automata** (03 Modell, FSM; `MobilRobot_StateMachine`): `MazeController.step()`, szöveges állapotnevekkel, mint az órai `FORWARD`/`AVOID`. Az állapotok és átmenetek táblázata a `maze_controller.py` elején van.
+- **Észlelés – Tervezés – Végrehajtás** (01–02): szenzorok és odometria → Flood-Fill útkeresés → állapotgép és motorparancsok.
+- **ZeroMQ Remote API** (`MobilRobot_ZeroMQ`, `CoppeliasimRobot.m`): a `build_robot.py` ugyanígy csatlakozik (`RemoteAPIClient()`, `client.getObject('sim')`). A vezérlés maga a robotba ágyazott scriptben fut, mert a leadandó `.ttt`-nek tartalmaznia kell a vezérlést.
 
 ## 2D teszt
 
