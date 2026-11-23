@@ -58,9 +58,9 @@ Ha módosítasz valamit, futtasd újra a `build_robot.py`-t, vagy másold be a `
   `w_left = (v - (w * wheelBase / 2.0)) / wheelRadius`, `w_right = (v + (w * wheelBase / 2.0)) / wheelRadius`.
   Az órai jelenetben a jobb motor tükrözött, ezért ott `-1.0`-s szorzó kell a `w_right`-ra; a MazeBot két csuklója egy irányba néz, így itt nem kell.
 - **Odometria / dead reckoning** (03 Modell, Útmérés): `Pose.update()`, `d = R·Δφ` (az órai `d = Δs/q · c`, `c = 2πR` alakja radiánban mért kerékszögre), `ds = (d_r + d_l)/2`, `dθ = (d_r − d_l)/L`.
-- **Véges állapotú automata** (03 Modell, FSM; `MobilRobot_StateMachine`): `MazeController.step()`, szöveges állapotnevekkel, mint az órai `FORWARD`/`AVOID`. Az állapotok és átmenetek táblázata a `maze_controller.py` elején van.
+- **Véges állapotú automata** (03 Modell, FSM; `MobilRobot_StateMachine`): `MazeController.step()`, szöveges állapotnevekkel.
 - **Észlelés – Tervezés – Végrehajtás** (01–02): szenzorok és odometria → Flood-Fill útkeresés → állapotgép és motorparancsok.
-- **ZeroMQ Remote API** (`MobilRobot_ZeroMQ`, `CoppeliasimRobot.m`): a `build_robot.py` ugyanígy csatlakozik (`RemoteAPIClient()`, `client.getObject('sim')`). A vezérlés maga a robotba ágyazott scriptben fut, mert a leadandó `.ttt`-nek tartalmaznia kell a vezérlést.
+- **ZeroMQ Remote API** (`MobilRobot_ZeroMQ`, `CoppeliasimRobot.m`): a `build_robot.py` ugyanígy csatlakozik (`RemoteAPIClient()`, `client.getObject('sim')`). A vezérlés maga a robotba ágyazott scriptben fut.
 
 ## 2D teszt
 
